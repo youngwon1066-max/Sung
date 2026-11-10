@@ -1101,7 +1101,7 @@
         cargo: "케미칼/석유제품 운반선 (5,631 DWT, 영창기업)",
         origin: { name: "대산항", lat: 37.0080, lon: 126.4150, time: "11/8 출항" },
         dest: { name: "여수/광양 석화부두", lat: 34.8428, lon: 127.6750, eta: "정박지 투묘 대기 중" },
-        pilotRule: "여수·광양 VTS 관제 하 도선사 승선 순번에 따라 부두 접안",
+        pilotRule: "여수·광양 VTS 관제 및 도선사 승선 순번",
         yeosuInbound: true,
         pastRoute: [
           [37.0080, 126.4150],
@@ -1530,7 +1530,7 @@
           {
             tag: "⚠️ 5. 부두 접안 및 관제 조건",
             time: "해상 교통관제",
-            text: `<span class='highlight-amber'>${vessel.pilotRule}</span> 하에 도선사 승선 승인 대기 중이며, 접안 시간 배정 시 실시간으로 알려드릴게요!`
+            text: `<span class='highlight-amber'>${vessel.pilotRule}</span>에 따른 부두 접안 대기 중이며, 도선사 승선 승인과 접안 시간 배정이 확정되면 실시간으로 알려드릴게요!`
           }
         );
       } else if (vessel.id === 'tn-idun' || vessel.name.toUpperCase().includes('IDUN')) {
