@@ -77,6 +77,95 @@
       flex-direction: column;
       gap: 10px;
     }
+
+    /* PWA 모바일 앱 설치 배너 & 버튼 */
+    .btn-install-app {
+      background: linear-gradient(135deg, #c084fc, #9333ea);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-pill);
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      box-shadow: 0 2px 10px rgba(192, 132, 252, 0.4);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .btn-install-app:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(192, 132, 252, 0.6);
+    }
+    .pwa-install-banner {
+      background: linear-gradient(135deg, #1e2638, #161c2a);
+      border: 1.5px solid var(--accent-lilac);
+      border-radius: var(--radius-card);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    }
+    .install-banner-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .install-banner-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    .install-banner-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .install-banner-text strong {
+      font-size: 13.5px;
+      color: #fff;
+    }
+    .install-banner-text span {
+      font-size: 11px;
+      color: var(--text-sub);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .install-banner-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .btn-banner-install {
+      background: linear-gradient(135deg, #c084fc, #9333ea);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-pill);
+      padding: 8px 14px;
+      font-size: 12.5px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(192, 132, 252, 0.4);
+    }
+    .btn-banner-close {
+      background: transparent;
+      color: var(--text-mute);
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 4px;
+      line-height: 1;
+    }
     .header-row {
       display: flex;
       align-items: center;
@@ -913,9 +1002,14 @@
             <span class="live-chip"><span class="live-dot"></span>AIS LIVE</span>
           </div>
         </div>
-        <button class="btn-refresh" id="btnRefresh">
-          <span class="refresh-icon">🔄</span> 최신 갱신
-        </button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn-install-app" id="btnHeaderInstall" style="display:none;">
+            📲 앱 설치
+          </button>
+          <button class="btn-refresh" id="btnRefresh">
+            <span class="refresh-icon">🔄</span> 최신 갱신
+          </button>
+        </div>
       </div>
 
       <!-- 선박 검색창 & 빠른 칩 -->
@@ -930,6 +1024,21 @@
         </div>
       </div>
     </header>
+
+    <!-- 모바일 앱 원터치 설치 배너 -->
+    <div id="pwa-install-banner" class="pwa-install-banner">
+      <div class="install-banner-left">
+        <img src="icons/icon-192.png" alt="앱 아이콘" class="install-banner-icon" />
+        <div class="install-banner-text">
+          <strong>피클마린 모바일 앱</strong>
+          <span>홈 화면에 설치해 전체화면 앱으로 쓰세요</span>
+        </div>
+      </div>
+      <div class="install-banner-actions">
+        <button id="btnBannerInstall" class="btn-banner-install">📲 앱 설치하기</button>
+        <button id="btnBannerClose" class="btn-banner-close" aria-label="닫기">✕</button>
+      </div>
+    </div>
 
     <!-- 커버화면 전용 뷰 전환 탭바 ([🗺️ 지도 관제] vs [💬 피클 브리핑]) -->
     <div class="cover-tab-switcher" id="coverTabSwitcher">
@@ -2283,6 +2392,58 @@
         navigator.serviceWorker.register('sw.js').catch(() => {});
       });
     }
+
+    // PWA 홈 화면 모바일 앱 설치 배너 & 버튼 핸들러
+    let deferredInstallPrompt = null;
+    const pwaBanner = document.getElementById('pwa-install-banner');
+    const btnBanner = document.getElementById('btnBannerInstall');
+    const btnHeader = document.getElementById('btnHeaderInstall');
+    const btnClose = document.getElementById('btnBannerClose');
+
+    const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+    if (isStandaloneMode) {
+      if (pwaBanner) pwaBanner.style.display = 'none';
+      if (btnHeader) btnHeader.style.display = 'none';
+    } else {
+      if (btnHeader) btnHeader.style.display = 'inline-flex';
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      if (!isStandaloneMode) {
+        if (pwaBanner) pwaBanner.style.display = 'flex';
+        if (btnHeader) btnHeader.style.display = 'inline-flex';
+      }
+    });
+
+    const triggerAppInstall = async () => {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        const choice = await deferredInstallPrompt.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          if (pwaBanner) pwaBanner.style.display = 'none';
+          if (btnHeader) btnHeader.style.display = 'none';
+        }
+        deferredInstallPrompt = null;
+      } else {
+        alert("📲 브라우저 상단/하단 메뉴(점 세 개 ⋮ 또는 ≡)에서\n'앱 설치' 또는 '홈 화면에 추가'를 누르시면\n스마트폰 바탕화면에 피클마린 앱이 설치됩니다!");
+      }
+    };
+
+    if (btnBanner) btnBanner.addEventListener('click', triggerAppInstall);
+    if (btnHeader) btnHeader.addEventListener('click', triggerAppInstall);
+    if (btnClose) btnClose.addEventListener('click', () => {
+      if (pwaBanner) pwaBanner.style.display = 'none';
+    });
+
+    window.addEventListener('appinstalled', () => {
+      if (pwaBanner) pwaBanner.style.display = 'none';
+      if (btnHeader) btnHeader.style.display = 'none';
+      deferredInstallPrompt = null;
+      alert("🎉 피클마린 앱이 성공적으로 설치되었습니다!\n스마트폰 홈 화면이나 앱스 목록에서 실행해 보세요.");
+    });
 
     // 초기 커버화면 탭 세팅
     const initCoverTab = new URLSearchParams(window.location.search).get('tab') || localStorage.getItem('pickle_cover_tab') || 'map';
