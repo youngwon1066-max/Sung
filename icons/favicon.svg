@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="피클마린트래킹">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#182134"/>
+      <stop offset="100%" stop-color="#0b0e14"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <path d="M4 54 C 12 48, 18 45, 25 42" fill="none" stroke="#06b6d4" stroke-width="3.4" stroke-linecap="round"/>
+  <path d="M42 34 C 48 28, 52 22, 54 15" fill="none" stroke="#06b6d4" stroke-width="3.4" stroke-linecap="round"/>
+  <circle cx="4" cy="54" r="2.6" fill="#0b0e14" stroke="#38bdf8" stroke-width="1.8"/>
+  <circle cx="54" cy="15" r="2.6" fill="#0b0e14" stroke="#38bdf8" stroke-width="1.8"/>
+  <path d="M18 44 L22 37 H45 L50 44 L46.5 48 H21.5 Z" fill="#f1f5f9"/>
+  <path d="M21 44 H47.6" stroke="#06b6d4" stroke-width="2"/>
+  <rect x="23" y="38.6" width="4.4" height="4.4" rx="0.8" fill="#111622"/>
+  <rect x="28.6" y="38.6" width="4.4" height="4.4" rx="0.8" fill="#111622"/>
+  <rect x="34.2" y="38.6" width="4.4" height="4.4" rx="0.8" fill="#111622"/>
+  <rect x="42" y="32" width="5.2" height="5.6" rx="1" fill="#f1f5f9"/>
+  <rect x="43" y="33.4" width="3.2" height="0.9" rx="0.4" fill="#111622"/>
+  <rect x="43" y="35.4" width="3.2" height="0.9" rx="0.4" fill="#111622"/>
+  <path d="M44.6 32 V 28.6" stroke="#f1f5f9" stroke-width="0.9"/>
+  <circle cx="44.6" cy="27.6" r="1.7" fill="#c084fc"/>
+</svg>

@@ -1,0 +1,2292 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>피클마린트래킹 (Pickle Marine Tracking)</title>
+  <meta name="description" content="실시간 해상 관제 · 5단계 브리핑 · 여수 중흥/낙포부두 연계 선박 모니터링 웹앱" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="theme-color" content="#0b0e14" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="피클마린" />
+  <meta property="og:title" content="피클마린트래킹 (Pickle Marine Tracking)" />
+  <meta property="og:description" content="실시간 해상 관제 · 5단계 브리핑 · 여수 중흥/낙포부두 연계" />
+  <meta property="og:type" content="website" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <!-- Leaflet 지도 라이브러리 (API 키 불필요) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    :root {
+      --bg-page: #0b0e14;
+      --bg-card: #141824;
+      --bg-card-sub: #1a2030;
+      --border-line: #222b40;
+      --text-main: #f1f5f9;
+      --text-sub: #94a3b8;
+      --text-mute: #64748b;
+      --accent-cyan: #06b6d4;
+      --accent-blue: #38bdf8;
+      --accent-green: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-lilac: #c084fc;
+      --accent-red: #ef4444;
+      --bubble-bg: #1e2638;
+      --bubble-border: #2d3852;
+      --radius-card: 16px;
+      --radius-pill: 999px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body, html {
+      width: 100%;
+      height: 100%;
+      background: var(--bg-page);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Noto Sans KR", sans-serif;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+      width: 100%;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 12px 28px 12px;
+    }
+
+    /* 상단 헤더 바 */
+    .top-header {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: rgba(11, 14, 20, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-line);
+      padding: 10px 4px;
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-icon { font-size: 22px; }
+    .brand-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .live-chip {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: var(--accent-green);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: var(--radius-pill);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.8); opacity: 1; }
+      50% { transform: scale(1.4); opacity: 0.5; }
+      100% { transform: scale(0.8); opacity: 1; }
+    }
+    .btn-refresh {
+      background: var(--bg-card);
+      border: 1px solid var(--border-line);
+      color: var(--text-main);
+      border-radius: var(--radius-pill);
+      padding: 5px 12px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      transition: all 0.2s ease;
+    }
+    .btn-refresh:active { transform: scale(0.96); }
+    .btn-refresh.spinning .refresh-icon {
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+
+    /* 선박 검색창 & 빠른 칩 */
+    .search-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .search-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-line);
+      border-radius: var(--radius-pill);
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    }
+    .search-box input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-size: 13.5px;
+      outline: none;
+      font-family: inherit;
+    }
+    .search-box input::placeholder { color: var(--text-mute); }
+    .btn-search-go {
+      background: var(--accent-cyan);
+      border: none;
+      color: #0b0e14;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+    }
+
+    .fleet-chips {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding-bottom: 2px;
+    }
+    .fleet-chips::-webkit-scrollbar { display: none; }
+    .chip {
+      background: var(--bg-card);
+      border: 1px solid var(--border-line);
+      border-radius: var(--radius-pill);
+      padding: 5px 8px 5px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-sub);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+    }
+    .chip.active {
+      background: rgba(6, 182, 212, 0.18);
+      border-color: var(--accent-cyan);
+      color: #fff;
+      box-shadow: 0 0 12px rgba(6, 182, 212, 0.3);
+    }
+    .chip-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .chip-delete-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: var(--text-mute);
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      font-size: 12px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .chip-delete-btn:hover {
+      background: rgba(239, 68, 68, 0.4);
+      color: #fff;
+    }
+    .chip.active .chip-delete-btn {
+      background: rgba(255, 255, 255, 0.25);
+      color: #fff;
+    }
+
+    /* ============================================================ */
+    /* 갤럭시 Z Fold8 최적화: 커버 화면(접었을 때) & 메인 화면(펼쳤을 때) */
+    /* ============================================================ */
+    .dashboard-split-layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      width: 100%;
+    }
+
+    /* 커버화면 전용 뷰 전환 탭바 */
+    .cover-tab-switcher {
+      display: none;
+    }
+
+    /* 1. 커버화면 (Fold8 접힘: 좁고 긴 세로화면 가로폭 < 680px) */
+    @media (max-width: 679px) {
+      .top-header {
+        padding: 8px 4px 4px 4px;
+        gap: 6px;
+      }
+      .brand-title { font-size: 15px; }
+      .search-box { padding: 5px 12px; }
+      .search-box input { font-size: 12.5px; }
+      .chip { padding: 4px 10px; font-size: 11px; }
+
+      /* 커버화면 탭 스위처 활성화 ([🗺️ 지도] vs [💬 브리핑]) */
+      .cover-tab-switcher {
+        display: flex;
+        background: #141824;
+        border: 1px solid var(--border-line);
+        border-radius: var(--radius-pill);
+        padding: 4px;
+        margin: 6px 0 10px 0;
+        gap: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      }
+      .cover-tab-btn {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--text-sub);
+        font-size: 13px;
+        font-weight: 700;
+        padding: 8px 12px;
+        border-radius: var(--radius-pill);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: all 0.2s ease;
+      }
+      .cover-tab-btn.active {
+        background: var(--accent-cyan);
+        color: #0b0e14;
+        box-shadow: 0 2px 8px rgba(6, 182, 212, 0.4);
+      }
+
+      .dashboard-split-layout {
+        display: block;
+      }
+
+      /* 지도 탭 활성화 시 */
+      body.cover-view-map .left-map-column {
+        display: flex !important;
+      }
+      body.cover-view-map .right-briefing-column {
+        display: none !important;
+      }
+      body.cover-view-map .map-frame {
+        height: calc(100vh - 230px);
+        min-height: 440px;
+      }
+
+      /* 브리핑 탭 활성화 시: 지도를 숨기고 브리핑 말풍선을 전체 화면으로 시원하게 표시! */
+      body.cover-view-briefing .left-map-column {
+        display: none !important;
+      }
+      body.cover-view-briefing .right-briefing-column {
+        display: flex !important;
+      }
+
+      .briefing-card {
+        padding: 14px;
+        border-radius: 14px;
+        gap: 12px;
+      }
+      .avatar-wrapper { width: 46px; height: 46px; }
+      .yurina-name { font-size: 15px; }
+      .bubble-box {
+        padding: 12px 14px;
+        font-size: 13.5px;
+        line-height: 1.55;
+      }
+    }
+
+    /* 2. 메인 대화면 (Fold8 펼침: 가로폭 >= 680px) */
+    @media (min-width: 680px) {
+      .cover-tab-switcher {
+        display: none !important;
+      }
+      .dashboard-split-layout {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr;
+        align-items: start;
+        gap: 14px;
+      }
+      /* 펼친 화면: 좌측에 시원한 고정 대형 지도, 우측에 말풍선 독립 스크롤 동시 표시 */
+      .left-map-column {
+        display: flex !important;
+        position: sticky;
+        top: 112px;
+        align-self: start;
+        z-index: 10;
+        min-width: 0;
+      }
+      .right-briefing-column {
+        display: flex !important;
+        min-width: 0;
+      }
+      .map-frame {
+        height: calc(100vh - 180px);
+        min-height: 440px;
+        max-height: 640px;
+      }
+    }
+
+    /* ------------------------------------------------------------ */
+    /* [좌측] 동적 실시간 항적 지도 프레임 */
+    /* ------------------------------------------------------------ */
+    .left-map-column {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .map-frame {
+      position: relative;
+      width: 100%;
+      height: 480px;
+      background: #0d121c;
+      border: 1px solid var(--border-line);
+      border-radius: var(--radius-card);
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+      background: #0d121c;
+    }
+
+    /* 지도 상단 오버레이 정보창 */
+    .map-tag-overlay {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 800;
+      background: rgba(11, 14, 20, 0.92);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-line);
+      border-radius: var(--radius-pill);
+      padding: 5px 12px;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+
+    /* 마커 스타일 */
+    .vessel-marker-pin {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transform: translate(-50%, -100%);
+    }
+    .vessel-marker-halo {
+      position: relative;
+      width: 32px;
+      height: 32px;
+      background: rgba(6, 182, 212, 0.25);
+      border: 2px solid var(--accent-cyan);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      box-shadow: 0 0 16px rgba(6, 182, 212, 0.6);
+      animation: vesselPulse 2.2s infinite;
+    }
+    @keyframes vesselPulse {
+      0% { transform: scale(0.95); box-shadow: 0 0 10px rgba(6, 182, 212, 0.4); }
+      50% { transform: scale(1.15); box-shadow: 0 0 22px rgba(6, 182, 212, 0.8); }
+      100% { transform: scale(0.95); box-shadow: 0 0 10px rgba(6, 182, 212, 0.4); }
+    }
+    .vessel-marker-label {
+      background: rgba(11, 14, 20, 0.95);
+      border: 1px solid var(--accent-cyan);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: var(--radius-pill);
+      white-space: nowrap;
+      margin-top: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    .port-marker-origin {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1.5px solid var(--accent-cyan);
+      color: #a5f3fc;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    .port-marker-dest {
+      background: rgba(17, 24, 39, 0.96);
+      border: 2px solid #ef4444;
+      color: #ffffff;
+      font-size: 11.5px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      white-space: nowrap;
+      box-shadow: 0 3px 12px rgba(239, 68, 68, 0.5), 0 2px 6px rgba(0,0,0,0.6);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .port-marker-dest .dest-name {
+      color: #f87171;
+      font-weight: 800;
+    }
+    .port-marker-dest .dest-badge {
+      background: #dc2626;
+      color: #ffffff;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 800;
+      margin-left: 2px;
+    }
+
+    /* 지도 하단 간결 버튼 바 */
+    .map-action-bar {
+      display: flex;
+      gap: 8px;
+    }
+    .map-btn {
+      flex: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border-line);
+      border-radius: var(--radius-pill);
+      padding: 9px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      transition: background 0.2s ease;
+    }
+    .map-btn:hover { background: rgba(30, 38, 56, 0.95); }
+
+    /* ------------------------------------------------------------ */
+    /* [우측] 담당 피클 프로필 & 5단계 순서별 말풍선 브리핑 */
+    /* ------------------------------------------------------------ */
+    .right-briefing-column {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .briefing-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-line);
+      border-radius: var(--radius-card);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+
+    /* 담당 피클 프로필 헤더 */
+    .yurina-profile-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-line);
+    }
+    .avatar-wrapper {
+      position: relative;
+      width: 52px;
+      height: 52px;
+      flex-shrink: 0;
+    }
+    .avatar-img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      display: block;
+      box-shadow: 0 4px 16px rgba(192, 132, 252, 0.4);
+      animation: floatBreath 3.5s ease-in-out infinite;
+    }
+    @keyframes floatBreath {
+      0% { transform: translateY(0px) scale(1); }
+      50% { transform: translateY(-3px) scale(1.02); }
+      100% { transform: translateY(0px) scale(1); }
+    }
+    .yurina-meta {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .yurina-name-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .yurina-name {
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+    }
+    .yurina-role-badge {
+      background: rgba(192, 132, 252, 0.15);
+      border: 1px solid rgba(192, 132, 252, 0.35);
+      color: var(--accent-lilac);
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+    }
+    .yurina-status-text {
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+
+    /* 자기 피클로 담당자 교체 버튼 */
+    .btn-handover-pickle {
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.28), rgba(99, 102, 241, 0.28));
+      border: 1px solid rgba(168, 85, 247, 0.55);
+      color: #f3e8ff;
+      border-radius: var(--radius-pill);
+      padding: 5px 11px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .btn-handover-pickle:hover {
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.5), rgba(99, 102, 241, 0.5));
+      border-color: #c084fc;
+      color: #fff;
+      transform: translateY(-1px);
+    }
+    .consonant-avatar {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 900;
+      color: #ffffff;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      animation: floatBreath 3.5s ease-in-out infinite;
+    }
+
+    /* 모달 팝업 */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(8px);
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+    .modal-card {
+      background: #141824;
+      border: 1px solid rgba(168, 85, 247, 0.35);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 420px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.85), 0 0 30px rgba(168, 85, 247, 0.2);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-line);
+      padding-bottom: 12px;
+    }
+    .modal-close-btn {
+      background: none;
+      border: none;
+      color: var(--text-sub);
+      font-size: 24px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0 4px;
+    }
+    .modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: 13px;
+    }
+    .pickle-preview-box {
+      background: rgba(20, 24, 36, 0.9);
+      border: 1px solid var(--border-line);
+      border-radius: 14px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .preview-consonant {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 900;
+      color: #fff;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+    }
+    .modal-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .modal-label {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--text-sub);
+    }
+    .modal-input {
+      background: #0b0e14;
+      border: 1px solid var(--border-line);
+      border-radius: 8px;
+      padding: 9px 12px;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+    }
+    .modal-input:focus {
+      border-color: var(--accent-lilac);
+    }
+    .consonant-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+    }
+    .consonant-btn {
+      background: #0b0e14;
+      border: 1px solid var(--border-line);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 800;
+      padding: 6px 0;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .consonant-btn.active {
+      background: var(--accent-lilac);
+      border-color: #fff;
+      color: #111;
+      transform: scale(1.05);
+    }
+    .color-grid {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .color-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .color-btn.active {
+      border-color: #fff;
+      transform: scale(1.2);
+      box-shadow: 0 0 10px rgba(255,255,255,0.6);
+    }
+    .modal-footer {
+      display: flex;
+      gap: 8px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-line);
+    }
+    .btn-share-link {
+      background: rgba(6, 182, 212, 0.15);
+      border: 1px solid rgba(6, 182, 212, 0.4);
+      color: var(--accent-cyan);
+      border-radius: var(--radius-pill);
+      padding: 8px 12px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn-reset-pickle {
+      background: transparent;
+      border: 1px solid var(--border-line);
+      color: var(--text-sub);
+      border-radius: var(--radius-pill);
+      padding: 8px 12px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-save-pickle {
+      flex: 1;
+      background: linear-gradient(135deg, #a855f7, #6366f1);
+      border: none;
+      color: #fff;
+      border-radius: var(--radius-pill);
+      padding: 8px 14px;
+      font-size: 12.5px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);
+    }
+
+    /* 관제 종료 버튼 */
+    .btn-close-vessel {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+      border-radius: var(--radius-pill);
+      padding: 5px 11px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s ease;
+    }
+    .btn-close-vessel:hover {
+      background: rgba(239, 68, 68, 0.25);
+      color: #fff;
+    }
+
+    /* 브리핑 말풍선 스트림 */
+    .chat-bubble-stream {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .bubble-item {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .bubble-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 6px;
+    }
+    .bubble-tag {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .bubble-time-badge {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-mute);
+    }
+    .bubble-box {
+      background: var(--bubble-bg);
+      border: 1px solid var(--bubble-border);
+      border-radius: 14px;
+      border-top-left-radius: 4px;
+      padding: 12px 14px;
+      font-size: 13.5px;
+      line-height: 1.55;
+      color: var(--text-main);
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0.4; transform: translateY(2px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .bubble-box b {
+      color: #fff;
+      font-weight: 700;
+    }
+    .highlight-cyan { color: var(--accent-cyan); font-weight: 700; }
+    .highlight-amber { color: var(--accent-amber); font-weight: 700; }
+    .highlight-blue { color: var(--accent-blue); font-weight: 700; }
+
+    /* 빈 화면 안내 */
+    .empty-state-box {
+      text-align: center;
+      padding: 40px 16px;
+      color: var(--text-sub);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn-restore-fleet {
+      background: var(--bg-card);
+      border: 1px solid var(--border-line);
+      color: var(--accent-cyan);
+      border-radius: var(--radius-pill);
+      padding: 6px 14px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="app">
+
+    <!-- 상단 헤더 & 검색 바 -->
+    <header class="top-header">
+      <div class="header-row">
+        <div class="brand">
+          <span class="brand-icon">🚢</span>
+          <div class="brand-title">
+            피클마린트래킹
+            <span class="live-chip"><span class="live-dot"></span>AIS LIVE</span>
+          </div>
+        </div>
+        <button class="btn-refresh" id="btnRefresh">
+          <span class="refresh-icon">🔄</span> 최신 갱신
+        </button>
+      </div>
+
+      <!-- 선박 검색창 & 빠른 칩 -->
+      <div class="search-row">
+        <div class="search-box">
+          <span>🔍</span>
+          <input type="text" id="shipSearchInput" placeholder="선박명 또는 IMO 번호 검색 (예: SUNRISE SAMBU, TN IDUN)" />
+          <button class="btn-search-go" id="btnSearchGo">조회</button>
+        </div>
+        <div class="fleet-chips" id="fleetChipsContainer">
+          <!-- 동적 칩 목록 -->
+        </div>
+      </div>
+    </header>
+
+    <!-- 커버화면 전용 뷰 전환 탭바 ([🗺️ 지도 관제] vs [💬 피클 브리핑]) -->
+    <div class="cover-tab-switcher" id="coverTabSwitcher">
+      <button class="cover-tab-btn active" id="tabBtnMap" onclick="switchCoverTab('map')">
+        <span>🗺️</span> 지도 관제
+      </button>
+      <button class="cover-tab-btn" id="tabBtnBriefing" onclick="switchCoverTab('briefing')">
+        <span>💬</span> <span id="tabBriefingLabel">피클 브리핑</span>
+      </button>
+    </div>
+
+    <!-- 좌우 2단 분할 레이아웃 (갤럭시 Z Fold8) -->
+    <main class="dashboard-split-layout">
+
+      <!-- [좌측] 동적 6x 광역 지도 & 원터치 링크 -->
+      <div class="left-map-column">
+        <div class="map-frame" id="mapFrame">
+          <div id="map"></div>
+          <div class="map-tag-overlay" id="mapTagOverlay">📐 실시간 항적도</div>
+        </div>
+        <div class="map-action-bar">
+          <a id="btnGmaps" href="https://www.google.com/maps" target="_blank" class="map-btn">
+            <span>📍</span> 구글지도 6x 조망
+          </a>
+          <a id="btnVf" href="https://www.vesselfinder.com" target="_blank" class="map-btn">
+            <span>🌐</span> VesselFinder 실시간
+          </a>
+        </div>
+      </div>
+
+      <!-- [우측] 담당 피클 프로필 & 5단계 순서별 말풍선 브리핑 -->
+      <div class="right-briefing-column">
+        <div class="briefing-card">
+          
+          <!-- 피클 프로필 헤더 & 담당자 피클 교체 / 관제 종료 버튼 -->
+          <div class="yurina-profile-row">
+            <div class="avatar-wrapper" id="pickleAvatarWrapper" style="cursor:pointer;" title="자기 피클로 담당자 교체">
+              <img src="icons/pickle-avatar.png" alt="피클 비서" class="avatar-img" id="pickleAvatarImg" onerror="this.style.display='none';var c=document.getElementById('pickleConsonantAvatar');if(c){c.style.display='flex';}" />
+              <div class="consonant-avatar" id="pickleConsonantAvatar" style="display:none;">ㅇ</div>
+            </div>
+            <div class="yurina-meta" id="pickleMeta" style="cursor:pointer;" title="자기 피클로 담당자 교체">
+              <div class="yurina-name-box">
+                <span class="yurina-name" id="pickleAgentName">피클</span>
+                <span class="yurina-role-badge" id="pickleUserBadge">워니 님의 AI 비서</span>
+              </div>
+              <span class="yurina-status-text" id="yurinaStatus">실시간 해상 관제 브리핑 ✨</span>
+            </div>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <button class="btn-handover-pickle" id="btnHandoverPickle" title="자기 피클로 담당자 교체하기">
+                🥒 자기 피클로 담당자 교체
+              </button>
+              <button class="btn-close-vessel" id="btnCloseVessel" title="도착 완료 또는 목록에서 삭제">
+                🗑️
+              </button>
+            </div>
+          </div>
+
+          <!-- 사용자가 지정한 브리핑 순서 말풍선 스트림 -->
+          <!-- 1. 위치 -> 2. 속도/침로 -> 3. 화물/흘수 -> 4. 도착예정일(ETA) -> 5. 중흥부두 접안/통항 조건 -->
+          <div class="chat-bubble-stream" id="chatBubbleStream">
+            <!-- 동적 말풍선 렌더링 -->
+          </div>
+
+        </div>
+      </div>
+
+    </main>
+
+    <!-- 자기 피클로 담당자 교체 모달 -->
+    <div class="modal-overlay" id="pickleModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div style="font-size:16.5px;font-weight:800;display:flex;align-items:center;gap:6px;color:#fff;">
+            <span>🥒</span> 자기 피클로 담당자 교체
+          </div>
+          <button class="modal-close-btn" id="btnCloseModal">×</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="pickle-preview-box">
+            <div class="preview-avatar-wrap" id="previewAvatarWrap">
+              <img src="icons/pickle-avatar.png" class="avatar-img" id="previewImg" style="width:48px;height:48px;" onerror="this.style.display='none';var c=document.getElementById('previewConsonant');if(c){c.style.display='flex';}" />
+              <div class="preview-consonant" id="previewConsonant" style="display:none;">ㅇ</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px;">
+              <div style="font-weight:800;font-size:16px;color:#fff;" id="previewAgentName">피클</div>
+              <div style="font-size:12px;color:var(--text-sub);" id="previewUserGreeting">워니 님을 위한 해상 관제 브리핑</div>
+            </div>
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">내 피클(비서) 이름</label>
+            <input type="text" id="inputAgentName" class="modal-input" placeholder="예: 피클, 초롱이, 라일락" value="피클" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">내 이름 / 호칭</label>
+            <input type="text" id="inputUserName" class="modal-input" placeholder="예: 워니 님, 정원 님, 김대리님" value="워니 님" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">피클 자음 캐릭터 선택</label>
+            <div class="consonant-grid" id="consonantGrid"></div>
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">피클 테마 컬러</label>
+            <div class="color-grid" id="colorGrid"></div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-share-link" id="btnShareLink" title="동료 초대 링크 복사">🔗 동료 초대 링크 복사</button>
+          <button class="btn-reset-pickle" id="btnResetPickle">기본값으로 복원</button>
+          <button class="btn-save-pickle" id="btnSavePickle">담당자 교체 완료 ✨</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // 기본 선박 원본 정의 (현실적인 해상 항로 곡선 웨이포인트 탑재)
+    const defaultFleet = [
+      {
+        id: "mi-lan",
+        name: "MI LAN",
+        imo: "9342047",
+        lat: 38.2500,
+        lon: 121.2000,
+        zoom: 6,
+        speed: 9.2,
+        course: "345° NNW (북북서)",
+        draught: "4.5m (공선 / 선적 대기)",
+        cargo: "케미칼/석유제품 운반선 (3,799 DWT, 중국선적)",
+        origin: { name: "중국 진산(Jinshan)", lat: 30.7000, lon: 121.3500, time: "11/7 출항" },
+        dest: { name: "중국 판진항(Panjin)", lat: 40.7100, lon: 122.0500, eta: "오늘 20:00 KST 입항" },
+        pilotRule: "보하이만 판진항 석유화학 터미널 선적 선석 배정 대기",
+        yeosuInbound: false,
+        pastRoute: [
+          [30.7000, 121.3500],
+          [31.8000, 122.5000],
+          [33.5000, 122.0000],
+          [35.8000, 122.2000],
+          [37.4000, 123.0000], // 산둥반도 성산두 외해 우회
+          [37.7500, 122.7000], // 산둥 북동 해상
+          [37.8500, 122.1000], // 웨이하이 북방 해상
+          [38.0000, 121.5000], // 옌타이 북방 해상
+          [38.2500, 121.2000]  // 보하이 해협 진입
+        ],
+        futureRoute: [
+          [38.2500, 121.2000],
+          [38.9000, 120.9000], // 보하이 해협 서측 통과
+          [39.8000, 121.2000], // 랴오둥만 해상 회랑
+          [40.4000, 121.6000], // 판진 외해 진입수로
+          [40.7100, 122.0500]  // 판진항 터미널 선석
+        ]
+      },
+      {
+        id: "yc-cosmos",
+        name: "YC COSMOS",
+        imo: "9409364",
+        lat: 34.8743,
+        lon: 127.7942,
+        zoom: 8,
+        speed: 0.1,
+        course: "035° NNE (투묘 대기)",
+        draught: "7.0m (만재)",
+        cargo: "케미칼/석유제품 운반선 (5,631 DWT, 영창기업)",
+        origin: { name: "대산항", lat: 37.0080, lon: 126.4150, time: "11/8 출항" },
+        dest: { name: "여수/광양 석화부두", lat: 34.8428, lon: 127.6750, eta: "정박지 투묘 대기 중" },
+        pilotRule: "여수·광양 VTS 관제 하 도선사 승선 순번에 따라 부두 접안",
+        yeosuInbound: true,
+        pastRoute: [
+          [37.0080, 126.4150],
+          [37.0500, 126.1500],
+          [36.6500, 125.8500],
+          [36.1000, 125.8000],
+          [35.1000, 125.7500],
+          [34.3500, 125.9500],
+          [34.1500, 126.8500],
+          [34.3000, 127.4500],
+          [34.4200, 127.7500],
+          [34.5800, 127.8200],
+          [34.7400, 127.8400],
+          [34.8743, 127.7942]
+        ],
+        futureRoute: [
+          [34.8743, 127.7942],
+          [34.8600, 127.7800],
+          [34.8650, 127.7400],
+          [34.8550, 127.7100],
+          [34.8450, 127.6800],
+          [34.8428, 127.6750]
+        ]
+      },
+      {
+        id: "sunrise-sambu",
+        name: "SUNRISE SAMBU",
+        imo: "9288007",
+        lat: 29.3373,
+        lon: 123.2278,
+        zoom: 6,
+        speed: 6.2,
+        course: "004° NNE",
+        draught: "6.4m",
+        cargo: "스타이렌모노머(SM) 만재",
+        origin: { name: "대만 안핑항", lat: 22.9900, lon: 120.1500, time: "11/7 출항" },
+        dest: { name: "여수 중흥부두", lat: 34.8428, lon: 127.6750, eta: "오늘 20:00 KST" },
+        pilotRule: "묘도수로 단독통항(교행 금지) 및 8노트 속도 제한",
+        yeosuInbound: true,
+        pastRoute: [
+          [22.9900, 120.1500],
+          [24.1000, 120.9000],
+          [25.5000, 121.9000],
+          [27.3000, 122.6000],
+          [29.3373, 123.2278]
+        ],
+        futureRoute: [
+          [29.3373, 123.2278],
+          [31.2000, 124.5000],
+          [32.8000, 125.8000],
+          [34.1000, 127.3500],
+          [34.6500, 127.8800], // 돌산도 외해
+          [34.7400, 127.8400], // 오동도 외해 주수로
+          [34.8000, 127.8100], // 여수-남해 해상 통항로
+          [34.8600, 127.7800], // 낙포부두 앞 광양만 진입
+          [34.8650, 127.7400], // 묘도 동남단 수로
+          [34.8550, 127.7100], // 묘도수로 (묘도 남측 수로)
+          [34.8450, 127.6800], // 중흥부두 앞 해상
+          [34.8428, 127.6750]  // 중흥부두 선석 접안
+        ]
+      },
+      {
+        id: "pacific-sambu",
+        name: "PACIFIC SAMBU",
+        imo: "9354129",
+        lat: 33.7200,
+        lon: 126.8500,
+        zoom: 6,
+        speed: 8.4,
+        course: "015° NNE",
+        draught: "5.6m",
+        cargo: "부타디엔(BD) 모노머 적재",
+        origin: { name: "동중국해 외해", lat: 30.5000, lon: 125.2000, time: "11/8 진입" },
+        dest: { name: "여수 중흥부두", lat: 34.8428, lon: 127.6750, eta: "오늘 23:45 KST" },
+        pilotRule: "외해 투묘 대기 후 내일 오전 묘도수로 통항 접안",
+        yeosuInbound: true,
+        pastRoute: [
+          [30.5000, 125.2000],
+          [32.0000, 126.0000],
+          [33.7200, 126.8500]
+        ],
+        futureRoute: [
+          [33.7200, 126.8500],
+          [34.3000, 127.4500],
+          [34.6500, 127.8800],
+          [34.7400, 127.8400],
+          [34.8000, 127.8100],
+          [34.8600, 127.7800],
+          [34.8650, 127.7400],
+          [34.8550, 127.7100],
+          [34.8450, 127.6800],
+          [34.8428, 127.6750]
+        ]
+      },
+      {
+        id: "tn-idun",
+        name: "TN IDUN",
+        imo: "9244879",
+        lat: 37.0225,
+        lon: 126.3110,
+        zoom: 7,
+        speed: 0.1,
+        course: "066° ENE (투묘 대기)",
+        draught: "3.9~4.0m",
+        cargo: "케미칼/석화제품 운반선 (3,576 DWT)",
+        origin: { name: "광양/여수항", lat: 34.8620, lon: 127.7780, time: "11/7 출항" },
+        dest: { name: "대산항 석화부두", lat: 37.0080, lon: 126.4150, eta: "대산 정박지 대기 중" },
+        pilotRule: "대산항 조석 및 도선사 승선 순번에 따라 선석 이동",
+        yeosuInbound: false,
+        pastRoute: [
+          [34.8620, 127.7780],
+          [34.7400, 127.8400], // 여수만 남하
+          [34.5800, 127.8200], // 돌산도 남단 해상
+          [34.4200, 127.7500], // 금오열도 남측 외해
+          [34.3000, 127.4500], // 나로도 남측 외해 우회
+          [34.1500, 126.8500], // 완도/청산도 남측
+          [34.3500, 125.9500], // 진도 서측 해상
+          [35.1000, 125.7500], // 서해 회랑 신안 외해
+          [36.1000, 125.8000], // 어청도 외해
+          [36.6500, 125.8500], // 격렬비열도 남서 외해
+          [37.0500, 126.1500], // 대산항 진입수로
+          [37.0225, 126.3110]  // 대산 외해 정박지 투묘
+        ],
+        futureRoute: [
+          [37.0225, 126.3110],
+          [37.0300, 126.3700],
+          [37.0080, 126.4150]
+        ]
+      },
+      {
+        id: "grace-sambu",
+        name: "GRACE SAMBU",
+        imo: "9288019",
+        lat: 34.8210,
+        lon: 127.7540,
+        zoom: 8,
+        speed: 0.0,
+        course: "계류 정박 중",
+        draught: "5.1m",
+        cargo: "석유화학 원료 모노머 하역 중",
+        origin: { name: "울산항", lat: 35.5000, lon: 129.3800, time: "하역 진행" },
+        dest: { name: "여수 낙포부두", lat: 34.8210, lon: 127.7540, eta: "접안 완료" },
+        pilotRule: "낙포부두 선석 하역 완료 후 출항(ETD) 대기",
+        yeosuInbound: true,
+        pastRoute: [
+          [35.5000, 129.3800],
+          [35.3400, 129.4000],
+          [35.1500, 129.2800],
+          [35.0300, 129.1000],
+          [34.7000, 128.7500],
+          [34.5800, 128.5000],
+          [34.6200, 128.0500],
+          [34.7400, 127.8400],
+          [34.8000, 127.8100],
+          [34.8210, 127.7540]
+        ],
+        futureRoute: []
+      }
+    ];
+
+    // 육지를 피하는 현실적인 해상 항로 웨이포인트 보간기 (해상 우회 알고리즘)
+    function buildSeaWaypoints(start, end) {
+      const [sLat, sLon] = start;
+      const [eLat, eLon] = end;
+
+      if (Math.abs(sLat - eLat) < 0.01 && Math.abs(sLon - eLon) < 0.01) return [];
+
+      const points = [start];
+
+      // 울산/부산(동해남부) <-> 여수/광양(남해중부) 간 이동 시: 남해안 외해 우회
+      if ((sLon > 128.8 && eLon < 128.2) || (sLon < 128.2 && eLon > 128.8)) {
+        if (sLon > eLon) { // 동 -> 서 (울산 -> 여수)
+          points.push([35.0300, 129.1000]); // 부산 태종대 외해
+          points.push([34.7000, 128.7500]); // 거제도 남단 해상
+          points.push([34.5800, 128.5000]); // 통영 매물도 남측
+          points.push([34.6200, 128.0500]); // 남해도 남단
+          points.push([34.7400, 127.8400]); // 여수만 외해 진입
+        } else { // 서 -> 동 (여수 -> 울산)
+          points.push([34.7400, 127.8400]);
+          points.push([34.6200, 128.0500]);
+          points.push([34.5800, 128.5000]);
+          points.push([34.7000, 128.7500]);
+          points.push([35.0300, 129.1000]);
+        }
+      } 
+      // 남해 <-> 서해 (여수/광양 <-> 대산/인천) 간 이동 시: 고흥·여수반도 관통 방지 및 서해안 회랑 우회
+      else if ((sLat < 35.2 && eLat > 36.5 && sLon > 126.5) || (sLat > 36.5 && eLat < 35.2 && eLon > 126.5)) {
+        if (sLat < eLat) { // 남 -> 북 (여수 -> 서해)
+          points.push([34.7400, 127.8400]); // 여수만 외해
+          points.push([34.5800, 127.8200]); // 돌산도 남단 해상
+          points.push([34.4200, 127.7500]); // 금오열도 남측 외해
+          points.push([34.3000, 127.4500]); // 나로도 남측 외해 우회
+          points.push([34.1500, 126.8500]); // 완도/청산도 남측
+          points.push([34.3500, 125.9500]); // 진도 서측 해상
+          points.push([35.1000, 125.7500]); // 신안 외해
+          points.push([36.1000, 125.8000]); // 어청도 외해
+          points.push([36.6500, 125.8500]); // 격렬비열도 남서 외해
+          points.push([37.0500, 126.1500]); // 대산항 진입수로
+        } else { // 북 -> 남 (서해 -> 여수)
+          points.push([37.0500, 126.1500]);
+          points.push([36.6500, 125.8500]);
+          points.push([36.1000, 125.8000]);
+          points.push([35.1000, 125.7500]);
+          points.push([34.3500, 125.9500]);
+          points.push([34.1500, 126.8500]);
+          points.push([34.3000, 127.4500]);
+          points.push([34.4200, 127.7500]);
+          points.push([34.5800, 127.8200]);
+          points.push([34.7400, 127.8400]);
+        }
+      }
+
+      points.push(end);
+      return points;
+    }
+
+    // 로컬스토리지에서 사용자 선박 목록 로드 (v7: 산둥반도·고흥반도·여수반도 완벽 우회 해상 곡선 항로 적용)
+    let fleetData = [];
+    try {
+      const stored = localStorage.getItem('pickle_fleet_data_v7');
+      if (stored) fleetData = JSON.parse(stored);
+    } catch (e) {}
+
+    if (!fleetData || fleetData.length === 0) {
+      fleetData = JSON.parse(JSON.stringify(defaultFleet));
+      saveFleet();
+    } else {
+      // 기본 선박들의 항로 및 부두 제원을 최신 공식 해로로 자동 병합
+      defaultFleet.forEach(defV => {
+        const idx = fleetData.findIndex(f => f.id === defV.id);
+        if (idx !== -1) {
+          fleetData[idx].pastRoute = defV.pastRoute;
+          fleetData[idx].futureRoute = defV.futureRoute;
+          fleetData[idx].dest = defV.dest;
+          fleetData[idx].origin = defV.origin;
+          fleetData[idx].pilotRule = defV.pilotRule;
+        }
+      });
+      saveFleet();
+    }
+
+    function saveFleet() {
+      try {
+        localStorage.setItem('pickle_fleet_data_v7', JSON.stringify(fleetData));
+      } catch (e) {}
+    }
+
+    let currentVessel = fleetData[0] || null;
+    const savedId = localStorage.getItem('pickle_selected_vessel');
+    if (savedId) {
+      const match = fleetData.find(v => v.id === savedId);
+      if (match) currentVessel = match;
+    }
+
+    // Leaflet 지도
+    let map = null;
+    let routeLayerGroup = null;
+
+    function initMap() {
+      const initLat = currentVessel ? currentVessel.lat : 34.0;
+      const initLon = currentVessel ? currentVessel.lon : 126.5;
+      const initZoom = currentVessel ? (currentVessel.zoom || 6) : 6;
+
+      map = L.map('map', {
+        zoomControl: true,
+        attributionControl: false
+      }).setView([initLat, initLon], initZoom);
+
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18
+      }).addTo(map);
+
+      routeLayerGroup = L.layerGroup().addTo(map);
+    }
+
+    // ============================================================
+    // 속도 분석 및 감속 사유 진단 엔진 (사용자 피드백 반영)
+    // 적정 순항속도(11~13노트) 대비 저속 운항 시 원인 설명 추가
+    // ============================================================
+    function formatSpeedAnalysis(vessel) {
+      const spd = typeof vessel.speed === 'number' ? vessel.speed : parseFloat(vessel.speed) || 0;
+      const normalSpeed = vessel.designSpeed || 12.0;
+
+      // 1. 투묘 정박 및 계류 (0.5노트 이하)
+      if (spd <= 0.5) {
+        if (vessel.dest && vessel.dest.eta && (vessel.dest.eta.includes('완료') || vessel.dest.eta.includes('접안'))) {
+          return `현재 속력은 <span class='highlight-cyan'>0.0노트</span>로 목적지 부두 선석에 <b>완전 계류(Moored)</b> 완료 상태입니다.
+            <div style="margin-top:6px;padding:6px 9px;background:rgba(6,182,212,0.12);border-left:3px solid #06b6d4;border-radius:4px;font-size:11.5px;color:#a5f3fc;line-height:1.45;">
+              ⚓ <b>선석 접안 완료:</b> 하역/선적 작업 진행 중이며 엔진 정지 및 계류삭 고정 상태입니다.
+            </div>`;
+        }
+        return `현재 속력은 <span class='highlight-cyan'>${spd.toFixed(1)}노트</span> (침로 <span class='highlight-blue'>${vessel.course || '대기'}</span>)입니다.
+          <div style="margin-top:6px;padding:6px 9px;background:rgba(6,182,212,0.12);border-left:3px solid #06b6d4;border-radius:4px;font-size:11.5px;color:#a5f3fc;line-height:1.45;">
+            ⚓ <b>외해 정박지 투묘 대기(At Anchor):</b> 목적지 항만 도선사 승선 및 선석 배정 순번 전까지 닻을 내리고 엔진 대기 상태를 유지 중입니다.
+          </div>`;
+      }
+
+      // 2. 적정 순항속도 대비 저속 운항 (0.5 < spd < 8.0노트)
+      if (spd < 8.0) {
+        let reasonText = "";
+        if (vessel.id === 'sunrise-sambu' || vessel.name.toUpperCase().includes('SUNRISE')) {
+          reasonText = "오늘 저녁 20시 여수 외해 도착 및 야간 도선 스케줄에 맞추기 위한 선석 대기 방지 감속 운항(Eco Steaming) 및 동중국해 해상 조류 조절로 분석됩니다.";
+        } else if (vessel.pilotRule && vessel.pilotRule.includes('8노트')) {
+          reasonText = "묘도수로 등 항만 연안 협수로 통항 안전속도 제한구역(8노트 이하) 진입에 따른 법정 감속 운항입니다.";
+        } else {
+          reasonText = `적정 순항속도(${normalSpeed}노트) 대비 저속 운항 중입니다. 목적지 항만의 선석 비움(Berth availability) 일정에 맞춘 경제 감속 항행(Eco Steaming) 또는 해상 너울·역조류 영향 가능성이 있습니다.`;
+        }
+
+        return `현재 속력은 <span class='highlight-cyan'>${spd.toFixed(1)}노트</span>, 침로는 <span class='highlight-blue'>${vessel.course || '순항'}</span>입니다.
+          <div style="margin-top:6px;padding:6px 9px;background:rgba(239,68,68,0.12);border-left:3px solid #ef4444;border-radius:4px;font-size:11.5px;color:#fca5a5;line-height:1.45;">
+            ⚠️ <b>적정 순항속도(${normalSpeed}노트) 대비 감속 운항 중:</b><br>${reasonText}
+          </div>`;
+      }
+
+      // 3. 경제 속도 운항 / 연안 감속 (8.0 <= spd < 10.5노트)
+      if (spd < 10.5) {
+        let ecoReason = "";
+        if (vessel.id === 'mi-lan' || vessel.name.toUpperCase().includes('MI LAN') || vessel.name.toUpperCase().includes('MILAN')) {
+          ecoReason = "보하이 해협 통항로 밀집 구간 통과 및 오늘 야간 20시 판진항 선적 터미널 입항 일정에 맞춘 경제 순항(Eco Steaming)입니다.";
+        } else if (vessel.id === 'pacific-sambu' || vessel.name.toUpperCase().includes('PACIFIC')) {
+          ecoReason = "오늘 심야 23:45 여수 도착 예정에 맞춰 야간 외해 대기 시간을 최소화하기 위한 경제 속도 조절 운항입니다.";
+        } else {
+          ecoReason = `적정 속도(${normalSpeed}노트) 대비 연료 소모 절감 및 입항 스케줄을 조율하는 경제 순항(Eco Speed) 구간입니다.`;
+        }
+
+        return `현재 속력은 <span class='highlight-cyan'>${spd.toFixed(1)}노트</span>, 침로는 <span class='highlight-blue'>${vessel.course || '순항'}</span>입니다.
+          <div style="margin-top:6px;padding:6px 9px;background:rgba(245,158,11,0.12);border-left:3px solid #f59e0b;border-radius:4px;font-size:11.5px;color:#fcd34d;line-height:1.45;">
+            💡 <b>경제 속도 운항(Eco Steaming):</b><br>${ecoReason}
+          </div>`;
+      }
+
+      // 4. 정상 순항 속도 (10.5노트 이상)
+      return `현재 속력은 <span class='highlight-cyan'>${spd.toFixed(1)}노트</span>, 침로는 <span class='highlight-blue'>${vessel.course || '순항'}</span>로 적정 순항 속도(${normalSpeed}노트 내외)를 유지하며 목적지를 향해 정상 운항 중입니다.`;
+    }
+
+    // ============================================================
+    // 사용자를 위한 동적 실시간 말풍선 브리핑 생성기
+    // (5단계 표준 브리핑: 위치 ➡️ 속도/침로 ➡️ 화물/흘수 ➡️ 목적지ETA ➡️ 부두관제)
+    // + 배에 따른 선택적 [⚓ 6. 여수 도착 여부 및 계획] 동적 분기!
+    // ============================================================
+    function generateDynamicBriefing(vessel) {
+      const now = new Date();
+      const simpleTime = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+      const briefings = [];
+      const uName = (window.currentProfile && window.currentProfile.userName) ? window.currentProfile.userName : '워니 님';
+
+      // 1~5단계: 선박별 실제 항로 및 제원에 1:1 매칭
+      if (vessel.id === 'mi-lan' || vessel.name.toUpperCase().includes('MI LAN') || vessel.name.toUpperCase().includes('MILAN')) {
+        briefings.push(
+          {
+            tag: "📍 1. 현재 위치",
+            time: simpleTime + " AIS 수신",
+            text: `${uName}! 지금 <b>${vessel.name}</b>호는 <span class='highlight-cyan'>북위 38.25°N, 동경 121.20°E</span> (보하이 해협 인근, 산둥반도 북방 해역)를 통과 중입니다 🚢`
+          },
+          {
+            tag: "⚡ 2. 현재 속도 및 침로",
+            time: simpleTime + " 측정",
+            text: formatSpeedAnalysis(vessel)
+          },
+          {
+            tag: "📦 3. 화물 및 흘수 상태",
+            time: "공선 (선적 대기)",
+            text: `현재 흘수는 <span class='highlight-amber'>${vessel.draught}</span> 상태입니다. ${uName} 말씀대로 여수 하역이 아니라 현지에서 원료를 **선적(적하)**하기 위해 이동 중인 공선(Ballast) 상태예요 (3,799 DWT 케미칼/석유제품 운반선).`
+          },
+          {
+            tag: "⏱️ 4. 중국 판진항 도착 예정일 (ETA)",
+            time: "실시간 예측",
+            text: `목적지 판진항(Panjin) 도착 예정 시간은 <span class='highlight-amber'>${vessel.dest.eta}</span>예요. 11/7 상하이 진산 석화기지를 출항해 약 <span class='highlight-cyan'>88%</span> 항로를 통과했습니다.`
+          },
+          {
+            tag: "⚠️ 5. 판진항 접안 및 관제 조건",
+            time: "항만 관제",
+            text: `여수가 아닌 <span class='highlight-amber'>중국 판진항 석유화학 전용 선적 터미널</span>로 접안 예정이며, 보하이만 VTS 통항 규칙 및 선석 배정 순번을 주시하고 있습니다!`
+          }
+        );
+      } else if (vessel.id === 'sunrise-sambu' || vessel.name.toUpperCase().includes('SUNRISE')) {
+        briefings.push(
+          {
+            tag: "📍 1. 현재 위치",
+            time: simpleTime + " AIS 수신",
+            text: `${uName}! 지금 <b>${vessel.name}</b>호는 <span class='highlight-cyan'>북위 29.34°N, 동경 123.23°E</span> (동중국해 해상, 저우산 남동쪽 약 133km)를 통과 중입니다 🚢`
+          },
+          {
+            tag: "⚡ 2. 현재 속도 및 침로",
+            time: simpleTime + " 측정",
+            text: formatSpeedAnalysis(vessel)
+          },
+          {
+            tag: "📦 3. 화물 및 흘수 상태",
+            time: "만재 상태",
+            text: `화물은 여수공장 투입용 <b>${vessel.cargo}</b> 상태이며, 현재 흘수는 <span class='highlight-amber'>${vessel.draught}</span>로 만재 기준에 가깝게 가라앉아 항해 중입니다.`
+          },
+          {
+            tag: "⏱️ 4. 여수 중흥부두 도착 예정일 (ETA)",
+            time: "실시간 예측",
+            text: `여수 외해 정박지 도착 예정 시간은 <span class='highlight-amber'>${vessel.dest.eta}</span>예요. 오늘 저녁 20시까지 약 10시간여 남았으며 전체 항로의 <span class='highlight-cyan'>68%</span>를 통과했습니다.`
+          },
+          {
+            tag: "⚠️ 5. 중흥부두 접안 및 통항 조건",
+            time: "산단 안전규정",
+            text: `중흥부두는 묘도수로를 거쳐야 해서 <span class='highlight-amber'>${vessel.pilotRule}</span>을 받아요. 도선사 승선 및 실제 선석 접안 스케줄 변동 시 즉시 알려드릴게요 ㅎㅎ`
+          }
+        );
+      } else if (vessel.id === 'yc-cosmos' || vessel.name.toUpperCase().includes('COSMOS')) {
+        briefings.push(
+          {
+            tag: "📍 1. 현재 위치",
+            time: simpleTime + " AIS 수신",
+            text: `${uName}! 지금 <b>${vessel.name}</b>호는 <span class='highlight-cyan'>북위 34.87°N, 동경 127.79°E</span> (광양/여수 외해 정박지)에 투묘 대기 중이에요 🚢`
+          },
+          {
+            tag: "⚡ 2. 현재 속도 및 침로",
+            time: simpleTime + " 측정",
+            text: formatSpeedAnalysis(vessel)
+          },
+          {
+            tag: "📦 3. 화물 및 흘수 상태",
+            time: "만재 상태",
+            text: `화물은 <b>${vessel.cargo}</b> 제원이며, 현재 흘수는 <span class='highlight-amber'>${vessel.draught}</span>로 하역 대기 상태입니다.`
+          },
+          {
+            tag: "⏱️ 4. 여수/광양 석화부두 입항 스케줄",
+            time: "접안 대기",
+            text: `외해 정박지 투묘 대기 중이며, 항만 하역 선석 배정 순번에 따라 접안 일정이 확정될 예정입니다.`
+          },
+          {
+            tag: "⚠️ 5. 부두 접안 및 관제 조건",
+            time: "해상 교통관제",
+            text: `<span class='highlight-amber'>${vessel.pilotRule}</span> 하에 도선사 승선 승인 대기 중이며, 접안 시간 배정 시 실시간으로 알려드릴게요!`
+          }
+        );
+      } else if (vessel.id === 'tn-idun' || vessel.name.toUpperCase().includes('IDUN')) {
+        briefings.push(
+          {
+            tag: "📍 1. 현재 위치",
+            time: simpleTime + " 위성 수신",
+            text: `${uName}! <b>${vessel.name}</b>호는 <span class='highlight-cyan'>북위 37.02°N, 동경 126.31°E</span> 서해안 대산항 외해 정박지에 투묘 대기 중이에요 🚢`
+          },
+          {
+            tag: "⚡ 2. 현재 속도 및 침로",
+            time: simpleTime + " 측정",
+            text: formatSpeedAnalysis(vessel)
+          },
+          {
+            tag: "📦 3. 화물 및 흘수 상태",
+            time: "선적 상태",
+            text: `<b>${vessel.cargo}</b> 제원으로 광양/여수 선적 후 현재 흘수는 <span class='highlight-amber'>${vessel.draught}</span> 상태입니다.`
+          },
+          {
+            tag: "⏱️ 4. 대산항 석화부두 접안 스케줄",
+            time: "일정 현황",
+            text: `11/7 여수/광양 출항 ➡️ 11/8 대산 도착 후 외해 정박지 대기 중이며, 대산 석화 선석 배정 순번을 기다리고 있습니다.`
+          },
+          {
+            tag: "⚠️ 5. 대산항 접안 및 관제 조건",
+            time: "항만 관제",
+            text: `<span class='highlight-amber'>${vessel.pilotRule}</span>에 따라 선석 이동 예정이며, 변동 발생 시 바로 업데이트해 드릴게요!`
+          }
+        );
+      } else if (vessel.id === 'pacific-sambu' || vessel.name.toUpperCase().includes('PACIFIC')) {
+        briefings.push(
+          {
+            tag: "📍 1. 현재 위치",
+            time: simpleTime + " AIS 수신",
+            text: `${uName}! 지금 <b>${vessel.name}</b>호는 <span class='highlight-cyan'>북위 33.72°N, 동경 126.85°E</span> (제주 동남방 약 65km 해역)를 통과 중입니다 🚢`
+          },
+          {
+            tag: "⚡ 2. 현재 속도 및 침로",
+            time: simpleTime + " 측정",
+            text: formatSpeedAnalysis(vessel)
+          },
+          {
+            tag: "📦 3. 화물 및 흘수 상태",
+            time: "적재 상태",
+            text: `화물은 여수공장 투입용 <b>${vessel.cargo}</b> 상태이며 현재 흘수는 <span class='highlight-amber'>${vessel.draught}</span>입니다.`
+          },
+          {
+            tag: "⏱️ 4. 여수 도착 예정일 (ETA)",
+            time: "실시간 예측",
+            text: `여수 외해 도착 예정 시간은 <span class='highlight-amber'>${vessel.dest.eta}</span>예요. 야간 도착 후 내일 아침 선석 이동을 준비하게 됩니다.`
+          },
+          {
+            tag: "⚠️ 5. 중흥부두 통항 조건",
+            time: "접안 계획",
+            text: `야간 외해 정박지 투묘 대기 후, 내일 오전 묘도수로 단독통항(8노트 제한) 승인받아 접안할 예정입니다.`
+          }
+        );
+      } else if (vessel.id === 'grace-sambu' || vessel.name.toUpperCase().includes('GRACE')) {
+        briefings.push(
+          {
+            tag: "📍 1. 현재 위치",
+            time: simpleTime + " 계류 중",
+            text: `<b>${vessel.name}</b>호는 <span class='highlight-cyan'>북위 34.8210° N, 동경 127.7540° E</span> 여수 낙포부두에 무사히 접안해 있습니다! ✅`
+          },
+          {
+            tag: "⚡ 2. 현재 속도 및 침로",
+            time: simpleTime + " 측정",
+            text: formatSpeedAnalysis(vessel)
+          },
+          {
+            tag: "📦 3. 화물 및 흘수 상태",
+            time: "하역 중",
+            text: `울산에서 수송해 온 석유화학 원료 모노머 하역 작업 중이며, 현재 흘수는 <span class='highlight-amber'>${vessel.draught}</span>입니다.`
+          },
+          {
+            tag: "⏱️ 4. 낙포부두 하역 현황",
+            time: "하역 진행",
+            text: `선석 하역이 차질 없이 진행 중이며, 하역 완료 후 출항(ETD) 일정이 확정되면 바로 챙겨드릴게요!`
+          },
+          {
+            tag: "⚠️ 5. 낙포부두 관제 조건",
+            time: "통항 허가",
+            text: `낙포부두 선석 하역 완료 시 묘도수로 통항 허가 확인 후 출항 예정입니다.`
+          }
+        );
+      } else {
+        // 검색으로 동적 등록된 일반 선박 브리핑
+        const destTitle = vessel.dest && vessel.dest.name ? vessel.dest.name : "목적지 항만";
+        const originTitle = vessel.origin && vessel.origin.name ? vessel.origin.name : "출발항";
+        const isBallast = (vessel.draught && (vessel.draught.includes('공선') || vessel.draught.includes('선적 대기'))) ||
+                          (vessel.cargo && (vessel.cargo.includes('실으러') || vessel.cargo.includes('선적')));
+
+        let cargoText = isBallast ?
+          `현재 흘수는 <span class='highlight-amber'>${vessel.draught || '4.5m'}</span> 상태입니다. 목적지 <b>${destTitle}</b>에서 화물을 **선적(적하)**하기 위해 이동하는 공선/선적 대기 상태예요.` :
+          `화물은 <b>${vessel.cargo || '석유화학 케미칼 제품'}</b>이며, 현재 흘수는 <span class='highlight-amber'>${vessel.draught || '5.5m'}</span> 상태입니다.`;
+
+        let ruleText = vessel.pilotRule;
+        if (!ruleText) {
+          if (destTitle.includes('중흥')) {
+            ruleText = "여수 묘도수로 단독통항(8노트 제한) 및 도선사 승선 수칙 적용";
+          } else if (destTitle.includes('대산')) {
+            ruleText = "대산항 조석 및 VTS 도선사 승선 순번에 따른 선석 접안";
+          } else if (destTitle.includes('울산')) {
+            ruleText = "울산항 액체화물 전용 선석 VTS 관제 수칙 적용";
+          } else if (destTitle.includes('중국') || destTitle.includes('판진') || destTitle.includes('Panjin')) {
+            ruleText = "중국 현지 항만 VTS 관제 및 석유화학 선적 터미널 배정 대기";
+          } else {
+            ruleText = `${destTitle} 관제 센터 VTS 통항 규칙 및 선석 배정 현황 주시`;
+          }
+        }
+
+        briefings.push(
+          {
+            tag: "📍 1. 현재 위치",
+            time: simpleTime + " 실시간 수신",
+            text: `${uName}! 지금 <b>${vessel.name}</b>호는 <span class='highlight-cyan'>북위 ${vessel.lat.toFixed(2)}°N, 동경 ${vessel.lon.toFixed(2)}°E</span> 해역을 항해 중입니다 🚢`
+          },
+          {
+            tag: "⚡ 2. 현재 속도 및 침로",
+            time: simpleTime + " 측정",
+            text: formatSpeedAnalysis(vessel)
+          },
+          {
+            tag: "📦 3. 화물 및 흘수 상태",
+            time: isBallast ? "선적 대기" : "화물 상태",
+            text: cargoText
+          },
+          {
+            tag: `⏱️ 4. ${destTitle} 도착 예정일 (ETA)`,
+            time: "실시간 예측",
+            text: `목적지 <b>${destTitle}</b> 도착 예정 시간은 <span class='highlight-amber'>${vessel.dest && vessel.dest.eta ? vessel.dest.eta : '입항 스케줄 확인 중'}</span>입니다.`
+          },
+          {
+            tag: `⚠️ 5. ${destTitle} 접안 및 관제 조건`,
+            time: "항만 관제",
+            text: `<span class='highlight-amber'>${ruleText}</span> 상태를 주시 중입니다!`
+          }
+        );
+      }
+
+      // [선택적 6단계] 사용자 요청: 여수 도착 여부 및 공장 연계 계획 (배에 따라 넣다 뺐다!)
+      const isYeosuBound = (vessel.yeosuInbound !== false) && (
+        (vessel.dest && vessel.dest.name && (vessel.dest.name.includes('여수') || vessel.dest.name.includes('중흥') || vessel.dest.name.includes('낙포') || vessel.dest.name.includes('광양'))) ||
+        (vessel.yeosuPlan)
+      );
+
+      if (isYeosuBound) {
+        let yeosuStatusText = "";
+        if (vessel.yeosuPlan) {
+          yeosuStatusText = vessel.yeosuPlan;
+        } else if (vessel.dest && vessel.dest.name.includes('중흥')) {
+          yeosuStatusText = `<b>[여수 입항 확정]</b> ${vessel.dest.eta || '오늘'} 여수 중흥부두로 최종 입항하며, 롯데케미칼 여수공장 원료 투입 스케줄과 직결됩니다.`;
+        } else if (vessel.dest && vessel.dest.name.includes('낙포')) {
+          yeosuStatusText = `<b>[여수 도착 완료]</b> 여수 낙포부두 선석에 계류 중이며 하역 완료 후 차기 운항 일정이 배정됩니다.`;
+        } else {
+          yeosuStatusText = `<b>[여수/광양 입항]</b> ${vessel.dest && vessel.dest.name} 입항 및 원료 하역 스케줄과 연동되어 있습니다.`;
+        }
+
+        briefings.push({
+          tag: "⚓ 6. 여수 도착 여부 및 계획",
+          time: "공장 투입 스케줄",
+          text: yeosuStatusText
+        });
+      }
+
+      return briefings;
+    }
+
+    function updateView() {
+      if (!currentVessel) {
+        renderEmptyState();
+        return;
+      }
+
+      localStorage.setItem('pickle_selected_vessel', currentVessel.id);
+
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      // 1. 지도 오버레이 텍스트
+      document.getElementById('mapTagOverlay').textContent = `📐 ${currentVessel.name} 실시간 항적도 (${timeStr})`;
+
+      // 2. 외부 링크 업데이트
+      document.getElementById('btnGmaps').href = `https://www.google.com/maps?q=${currentVessel.lat},${currentVessel.lon}&z=${currentVessel.zoom || 6}`;
+      document.getElementById('btnVf').href = currentVessel.imo ? 
+        `https://www.vesselfinder.com/vessels/details/${currentVessel.imo}` :
+        `https://www.vesselfinder.com/vessels?name=${encodeURIComponent(currentVessel.name)}`;
+
+      // 3. 담당 피클 상태 문구 (수신 시각 명시)
+      document.getElementById('yurinaStatus').textContent = `${currentVessel.name} 실시간 관제 중 (${timeStr} 갱신) ✨`;
+
+      // 4. 지도 위치 및 항적선 실시간 갱신!
+      renderMapForVessel();
+
+      // 5. 동적 말풍선 스트림 렌더링!
+      renderBubbles();
+    }
+
+    function renderMapForVessel() {
+      if (!map || !routeLayerGroup || !currentVessel) return;
+
+      routeLayerGroup.clearLayers();
+
+      const vLat = currentVessel.lat;
+      const vLon = currentVessel.lon;
+      const zoom = currentVessel.zoom || 6;
+
+      map.flyTo([vLat, vLon], zoom, { duration: 0.8 });
+
+      // 출항지 / 목적지 연결선 및 마커
+      if (currentVessel.origin && currentVessel.dest) {
+        const oLat = currentVessel.origin.lat;
+        const oLon = currentVessel.origin.lon;
+        const dLat = currentVessel.dest.lat;
+        const dLon = currentVessel.dest.lon;
+
+        // 1. 지나온 해상 항로 (파란색 실선, 둥근 곡선 연결)
+        let pastPoints = [];
+        if (currentVessel.pastRoute && currentVessel.pastRoute.length > 1) {
+          pastPoints = currentVessel.pastRoute;
+        } else if (currentVessel.origin) {
+          pastPoints = buildSeaWaypoints([oLat, oLon], [vLat, vLon]);
+        }
+
+        if (pastPoints.length > 1) {
+          L.polyline(pastPoints, {
+            color: '#06b6d4',
+            weight: 3.5,
+            opacity: 0.85,
+            lineJoin: 'round',
+            lineCap: 'round'
+          }).addTo(routeLayerGroup);
+        }
+
+        // 2. 앞으로 갈 예정 해상 항로 (선명한 빨간색 점선, 둥근 곡선 연결)
+        let futurePoints = [];
+        if (currentVessel.futureRoute && currentVessel.futureRoute.length > 1) {
+          futurePoints = currentVessel.futureRoute;
+        } else if (currentVessel.dest && (Math.abs(vLat - dLat) > 0.01 || Math.abs(vLon - dLon) > 0.01)) {
+          futurePoints = buildSeaWaypoints([vLat, vLon], [dLat, dLon]);
+        }
+
+        if (futurePoints.length > 1) {
+          L.polyline(futurePoints, {
+            color: '#ef4444',
+            weight: 3.5,
+            dashArray: '7, 8',
+            opacity: 0.95,
+            lineJoin: 'round',
+            lineCap: 'round'
+          }).addTo(routeLayerGroup);
+        }
+
+        const originIcon = L.divIcon({
+          className: 'port-marker',
+          html: `<div class="port-marker-origin">⚓ ${currentVessel.origin.name} (${currentVessel.origin.time || '출항'})</div>`,
+          iconAnchor: [30, 20]
+        });
+        L.marker([oLat, oLon], { icon: originIcon }).addTo(routeLayerGroup);
+
+        const destIcon = L.divIcon({
+          className: 'port-marker',
+          html: `<div class="port-marker-dest">🏁 <span class="dest-name">${currentVessel.dest.name}</span> <span class="dest-badge">${currentVessel.dest.eta || '도착'}</span></div>`,
+          iconAnchor: [30, 20]
+        });
+        L.marker([dLat, dLon], { icon: destIcon }).addTo(routeLayerGroup);
+      }
+
+      // 선박 현재 위치 커스텀 마커
+      const vesselIcon = L.divIcon({
+        className: 'vessel-marker-pin',
+        html: `
+          <div class="vessel-marker-halo">🚢</div>
+          <div class="vessel-marker-label">${currentVessel.name}</div>
+        `,
+        iconAnchor: [16, 28]
+      });
+
+      L.marker([vLat, vLon], { icon: vesselIcon }).addTo(routeLayerGroup);
+    }
+
+    function renderBubbles() {
+      const container = document.getElementById('chatBubbleStream');
+      container.innerHTML = '';
+
+      if (!currentVessel) return;
+
+      const dynamicBriefings = generateDynamicBriefing(currentVessel);
+
+      dynamicBriefings.forEach(bItem => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'bubble-item';
+
+        const headerRow = document.createElement('div');
+        headerRow.className = 'bubble-header-row';
+
+        const tagEl = document.createElement('div');
+        tagEl.className = 'bubble-tag';
+        tagEl.textContent = bItem.tag;
+
+        const timeBadge = document.createElement('div');
+        timeBadge.className = 'bubble-time-badge';
+        timeBadge.textContent = bItem.time;
+
+        headerRow.appendChild(tagEl);
+        headerRow.appendChild(timeBadge);
+
+        const boxEl = document.createElement('div');
+        boxEl.className = 'bubble-box';
+        boxEl.innerHTML = bItem.text;
+
+        itemEl.appendChild(headerRow);
+        itemEl.appendChild(boxEl);
+        container.appendChild(itemEl);
+      });
+    }
+
+    function renderEmptyState() {
+      if (routeLayerGroup) routeLayerGroup.clearLayers();
+      document.getElementById('mapTagOverlay').textContent = `관제 대기 중`;
+      document.getElementById('yurinaStatus').textContent = `관제 중인 선박이 없습니다`;
+
+      const container = document.getElementById('chatBubbleStream');
+      container.innerHTML = `
+        <div class="empty-state-box">
+          <div style="font-size:32px;">⚓</div>
+          <div><b>현재 관제 중인 선박이 모두 정리되었습니다!</b></div>
+          <div style="font-size:12.5px;">상단 검색창에서 배 이름이나 IMO 번호를 검색하여 새 선박을 추가해 주세요.</div>
+          <button class="btn-restore-fleet" id="btnRestoreFleet">🔄 기본 선박 목록 복원하기</button>
+        </div>
+      `;
+
+      document.getElementById('btnRestoreFleet').addEventListener('click', () => {
+        fleetData = JSON.parse(JSON.stringify(defaultFleet));
+        saveFleet();
+        currentVessel = fleetData[0];
+        renderChips();
+        updateView();
+      });
+    }
+
+    function renderChips() {
+      const chipContainer = document.getElementById('fleetChipsContainer');
+      chipContainer.innerHTML = '';
+
+      fleetData.forEach((v) => {
+        const chip = document.createElement('div');
+        chip.className = `chip ${currentVessel && v.id === currentVessel.id ? 'active' : ''}`;
+
+        const label = document.createElement('span');
+        label.className = 'chip-label';
+        label.innerHTML = `🚢 ${v.name}`;
+        label.addEventListener('click', () => {
+          currentVessel = v;
+          renderChips();
+          updateView();
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'chip-delete-btn';
+        delBtn.innerHTML = '×';
+        delBtn.title = `${v.name} 관제 종료 및 삭제`;
+        delBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteVessel(v.id);
+        });
+
+        chip.appendChild(label);
+        chip.appendChild(delBtn);
+        chipContainer.appendChild(chip);
+      });
+    }
+
+    function deleteVessel(idToDelete) {
+      const target = fleetData.find(v => v.id === idToDelete);
+      const targetName = target ? target.name : "선박";
+
+      fleetData = fleetData.filter(v => v.id !== idToDelete);
+      saveFleet();
+
+      if (currentVessel && currentVessel.id === idToDelete) {
+        currentVessel = fleetData.length > 0 ? fleetData[0] : null;
+      }
+
+      renderChips();
+      updateView();
+
+      const status = document.getElementById('yurinaStatus');
+      if (status) {
+        status.textContent = `${targetName}호 관제가 종료되었습니다 ✅`;
+        setTimeout(() => {
+          if (currentVessel) {
+            status.textContent = `${currentVessel.name} 실시간 관제 브리핑 중 ✨`;
+          }
+        }, 2200);
+      }
+    }
+
+    document.getElementById('btnCloseVessel').addEventListener('click', () => {
+      if (!currentVessel) return;
+      deleteVessel(currentVessel.id);
+    });
+
+    function executeSearch() {
+      const input = document.getElementById('shipSearchInput');
+      const q = input.value.trim().toUpperCase();
+      if (!q) return;
+
+      let found = fleetData.find(v => v.name.toUpperCase().includes(q) || (v.imo && v.imo.includes(q)));
+      
+      if (found) {
+        currentVessel = found;
+      } else {
+        // 기본 선박 정의 중에 일치하는 것이 있는지 우선 확인
+        let defFound = defaultFleet.find(v => v.name.toUpperCase().includes(q) || (v.imo && v.imo.includes(q)));
+        if (defFound) {
+          fleetData.unshift(JSON.parse(JSON.stringify(defFound)));
+          saveFleet();
+          currentVessel = fleetData[0];
+        } else {
+          const newVessel = {
+            id: "custom-" + Date.now(),
+            name: q,
+            imo: q.match(/^\d+$/) ? q : "",
+            lat: 34.5000,
+            lon: 126.8000,
+            zoom: 6,
+            speed: 8.0,
+            course: "항해 중",
+            draught: "5.5m",
+            cargo: "석유화학 케미칼 제품",
+            origin: { name: "출발항", lat: 31.0000, lon: 122.0000, time: "출항" },
+            dest: { name: "목적지 항만", lat: 36.0000, lon: 126.0000, eta: "입항 예정" },
+            pilotRule: "해당 항만 VTS 통항 규칙 및 선석 배정 현황 주시",
+            yeosuInbound: false
+          };
+          fleetData.unshift(newVessel);
+          saveFleet();
+          currentVessel = newVessel;
+        }
+      }
+
+      renderChips();
+      updateView();
+      input.value = '';
+      input.blur();
+    }
+
+    document.getElementById('shipSearchInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') executeSearch();
+    });
+    document.getElementById('btnSearchGo').addEventListener('click', executeSearch);
+
+    // [최신 갱신] 버튼 클릭 시: 캐시를 깨고 서버에서 최신 배포 선박 데이터와 위성 좌표를 강제 새로고침!
+    document.getElementById('btnRefresh').addEventListener('click', () => {
+      const refreshBtn = document.getElementById('btnRefresh');
+      refreshBtn.classList.add('spinning');
+
+      const status = document.getElementById('yurinaStatus');
+      if (currentVessel) {
+        localStorage.setItem('pickle_selected_vessel', currentVessel.id);
+        status.textContent = `${currentVessel.name} 최신 서버 데이터 및 위성 패킷 재동기화 중... 📡`;
+      }
+
+      setTimeout(() => {
+        window.location.href = window.location.pathname + '?t=' + Date.now();
+      }, 350);
+    });
+
+    if ('caches' in window) {
+      caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
+    }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(err => console.log(err));
+    }
+
+    window.addEventListener('resize', () => {
+      if (map) map.invalidateSize();
+    });
+
+    // 커버화면 탭 전환 함수
+    function switchCoverTab(tab) {
+      localStorage.setItem('pickle_cover_tab', tab);
+      const tabMap = document.getElementById('tabBtnMap');
+      const tabBriefing = document.getElementById('tabBtnBriefing');
+
+      if (tab === 'briefing') {
+        document.body.classList.remove('cover-view-map');
+        document.body.classList.add('cover-view-briefing');
+        if (tabMap) tabMap.classList.remove('active');
+        if (tabBriefing) tabBriefing.classList.add('active');
+      } else {
+        document.body.classList.remove('cover-view-briefing');
+        document.body.classList.add('cover-view-map');
+        if (tabMap) tabMap.classList.add('active');
+        if (tabBriefing) tabBriefing.classList.remove('active');
+        setTimeout(() => { if (map) map.invalidateSize(); }, 150);
+      }
+    }
+
+    // ============================================================
+    // [🥒 자기 피클로 담당자 교체] 프로필 및 인수인계 관리자
+    // ============================================================
+    const CONSONANTS = ['ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+    const COLORS = [
+      { name: '라일락', hex: '#c084fc' },
+      { name: '민트', hex: '#2dd4bf' },
+      { name: '스카이', hex: '#38bdf8' },
+      { name: '코랄', hex: '#f87171' },
+      { name: '레몬', hex: '#facc15' },
+      { name: '에메랄드', hex: '#4ade80' }
+    ];
+
+    const AVATAR_IMG_SRC = 'icons/pickle-avatar.png';
+
+    const DEFAULT_PROFILE = {
+      agentName: '피클',
+      userName: '워니 님',
+      consonant: 'ㅇ',
+      color: '#c084fc',
+      useDefaultImg: false
+    };
+
+    let pickleProfile = JSON.parse(JSON.stringify(DEFAULT_PROFILE));
+    window.currentProfile = pickleProfile;
+
+    function initPickleProfile() {
+      // 1. URL 파라미터 확인 (?agent=초롱이&user=민수&consonant=ㅊ&color=%232dd4bf)
+      const urlParams = new URLSearchParams(window.location.search);
+      const stored = localStorage.getItem('pickle_marine_profile');
+
+      if (urlParams.has('agent') || urlParams.has('user')) {
+        pickleProfile.agentName = urlParams.get('agent') || pickleProfile.agentName;
+        let u = urlParams.get('user') || pickleProfile.userName;
+        if (!u.endsWith('님') && !u.endsWith('님!') && !u.endsWith('책') && !u.endsWith('장')) u += ' 님';
+        pickleProfile.userName = u;
+        if (urlParams.has('consonant')) pickleProfile.consonant = urlParams.get('consonant');
+        if (urlParams.has('color')) pickleProfile.color = urlParams.get('color');
+        pickleProfile.useDefaultImg = false;
+        savePickleProfile();
+      } else if (stored) {
+        try {
+          pickleProfile = Object.assign(pickleProfile, JSON.parse(stored));
+        } catch (e) {}
+      }
+
+      applyProfileToUI();
+      setupProfileModal();
+    }
+
+    function savePickleProfile() {
+      localStorage.setItem('pickle_marine_profile', JSON.stringify(pickleProfile));
+    }
+
+    function applyProfileToUI() {
+      window.currentProfile = pickleProfile;
+      const nameEl = document.getElementById('pickleAgentName');
+      const badgeEl = document.getElementById('pickleUserBadge');
+      const imgEl = document.getElementById('pickleAvatarImg');
+      const consEl = document.getElementById('pickleConsonantAvatar');
+
+      if (nameEl) nameEl.textContent = pickleProfile.agentName;
+      if (badgeEl) badgeEl.textContent = `${pickleProfile.userName}의 AI 비서`;
+
+      const tabLabel = document.getElementById('tabBriefingLabel');
+      if (tabLabel) tabLabel.textContent = `${pickleProfile.agentName} 브리핑`;
+
+      if (pickleProfile.useDefaultImg) {
+        const imgOk = imgEl && imgEl.complete && imgEl.naturalWidth > 0;
+        if (imgEl) imgEl.style.display = imgOk ? 'block' : 'none';
+        if (consEl) {
+          consEl.style.display = imgOk ? 'none' : 'flex';
+          consEl.textContent = pickleProfile.consonant;
+          consEl.style.background = pickleProfile.color;
+        }
+      } else {
+        if (imgEl) imgEl.style.display = 'none';
+        if (consEl) {
+          consEl.style.display = 'flex';
+          consEl.textContent = pickleProfile.consonant;
+          consEl.style.background = pickleProfile.color;
+        }
+      }
+
+      const statusEl = document.getElementById('yurinaStatus');
+      if (statusEl && currentVessel) {
+        statusEl.textContent = `${pickleProfile.agentName} 실시간 해상 관제 중 ✨`;
+      }
+    }
+
+    function setupProfileModal() {
+      const modal = document.getElementById('pickleModal');
+      const btnOpen = document.getElementById('btnHandoverPickle');
+      const btnClose = document.getElementById('btnCloseModal');
+      const avatarWrap = document.getElementById('pickleAvatarWrapper');
+      const metaWrap = document.getElementById('pickleMeta');
+
+      const inputAgent = document.getElementById('inputAgentName');
+      const inputUser = document.getElementById('inputUserName');
+      const consonantGrid = document.getElementById('consonantGrid');
+      const colorGrid = document.getElementById('colorGrid');
+
+      let editConsonant = pickleProfile.consonant;
+      let editColor = pickleProfile.color;
+      let editUseDefault = pickleProfile.useDefaultImg;
+
+      function updatePreview() {
+        const pName = inputAgent.value.trim() || DEFAULT_PROFILE.agentName;
+        let uName = inputUser.value.trim() || DEFAULT_PROFILE.userName;
+        if (!uName.endsWith('님') && !uName.endsWith('책') && !uName.endsWith('장')) uName += ' 님';
+
+        document.getElementById('previewAgentName').textContent = pName;
+        document.getElementById('previewUserGreeting').textContent = `${uName}을 위한 해상 관제 브리핑`;
+
+        const prevImg = document.getElementById('previewImg');
+        const prevCons = document.getElementById('previewConsonant');
+
+        if (editUseDefault) {
+          prevImg.style.display = 'block';
+          prevCons.style.display = 'none';
+        } else {
+          prevImg.style.display = 'none';
+          prevCons.style.display = 'flex';
+          prevCons.textContent = editConsonant;
+          prevCons.style.background = editColor;
+        }
+      }
+
+      // 자음 버튼 생성
+      consonantGrid.innerHTML = '';
+      CONSONANTS.forEach(c => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `consonant-btn ${c === editConsonant && !editUseDefault ? 'active' : ''}`;
+        btn.textContent = c;
+        btn.addEventListener('click', () => {
+          editConsonant = c;
+          editUseDefault = false;
+          consonantGrid.querySelectorAll('.consonant-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          updatePreview();
+        });
+        consonantGrid.appendChild(btn);
+      });
+
+      // 컬러 버튼 생성
+      colorGrid.innerHTML = '';
+      COLORS.forEach(cObj => {
+        const cBtn = document.createElement('button');
+        cBtn.type = 'button';
+        cBtn.className = `color-btn ${cObj.hex === editColor ? 'active' : ''}`;
+        cBtn.style.background = cObj.hex;
+        cBtn.title = cObj.name;
+        cBtn.addEventListener('click', () => {
+          editColor = cObj.hex;
+          colorGrid.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+          cBtn.classList.add('active');
+          updatePreview();
+        });
+        colorGrid.appendChild(cBtn);
+      });
+
+      function openModal() {
+        inputAgent.value = pickleProfile.agentName;
+        inputUser.value = pickleProfile.userName;
+        editConsonant = pickleProfile.consonant;
+        editColor = pickleProfile.color;
+        editUseDefault = pickleProfile.useDefaultImg;
+
+        consonantGrid.querySelectorAll('.consonant-btn').forEach(b => {
+          b.classList.toggle('active', b.textContent === editConsonant && !editUseDefault);
+        });
+        colorGrid.querySelectorAll('.color-btn').forEach(b => {
+          b.classList.toggle('active', b.style.background === editColor || b.title === editColor);
+        });
+
+        updatePreview();
+        modal.classList.add('active');
+      }
+
+      function closeModal() {
+        modal.classList.remove('active');
+      }
+
+      if (btnOpen) btnOpen.addEventListener('click', openModal);
+      if (avatarWrap) avatarWrap.addEventListener('click', openModal);
+      if (metaWrap) metaWrap.addEventListener('click', openModal);
+      if (btnClose) btnClose.addEventListener('click', closeModal);
+
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+      });
+
+      inputAgent.addEventListener('input', updatePreview);
+      inputUser.addEventListener('input', updatePreview);
+
+      // 담당자 교체 완료 저장
+      document.getElementById('btnSavePickle').addEventListener('click', () => {
+        const pName = inputAgent.value.trim() || '피클이';
+        let uName = inputUser.value.trim() || '담당자 님';
+        if (!uName.endsWith('님') && !uName.endsWith('책') && !uName.endsWith('장')) uName += ' 님';
+
+        pickleProfile.agentName = pName;
+        pickleProfile.userName = uName;
+        pickleProfile.consonant = editConsonant;
+        pickleProfile.color = editColor;
+        pickleProfile.useDefaultImg = editUseDefault;
+
+        savePickleProfile();
+        applyProfileToUI();
+        renderBubbles();
+        closeModal();
+
+        alert(`✅ 담당자 피클이 '${pName}' (${uName})으로 성공적으로 교체되었습니다!`);
+      });
+
+      // 기본값으로 복원
+      document.getElementById('btnResetPickle').addEventListener('click', () => {
+        pickleProfile = JSON.parse(JSON.stringify(DEFAULT_PROFILE));
+        savePickleProfile();
+        applyProfileToUI();
+        renderBubbles();
+        closeModal();
+        alert(`💜 기본 설정(${DEFAULT_PROFILE.agentName} / ${DEFAULT_PROFILE.userName})으로 복원되었습니다!`);
+      });
+
+      // 동료 초대 링크 복사
+      document.getElementById('btnShareLink').addEventListener('click', () => {
+        const pName = inputAgent.value.trim() || pickleProfile.agentName;
+        let uName = inputUser.value.trim() || pickleProfile.userName;
+        const link = `${window.location.origin}${window.location.pathname}?agent=${encodeURIComponent(pName)}&user=${encodeURIComponent(uName)}&consonant=${encodeURIComponent(editConsonant)}&color=${encodeURIComponent(editColor)}`;
+        
+        navigator.clipboard.writeText(link).then(() => {
+          alert(`🔗 동료 맞춤 초대 링크가 클립보드에 복사되었습니다!\n카카오톡이나 사내 메신저로 전달해 보세요:\n\n${link}`);
+        }).catch(() => {
+          prompt("아래 링크를 복사해 동료에게 전달하세요:", link);
+        });
+      });
+    }
+
+    initMap();
+    initPickleProfile();
+    renderChips();
+    updateView();
+
+    // PWA 서비스 워커 등록 (홈 화면 추가·오프라인 셸 캐시)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
+    }
+
+    // 초기 커버화면 탭 세팅
+    const initCoverTab = new URLSearchParams(window.location.search).get('tab') || localStorage.getItem('pickle_cover_tab') || 'map';
+    switchCoverTab(initCoverTab);
+  </script>
+</body>
+</html>

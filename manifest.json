@@ -1,0 +1,49 @@
+{
+  "name": "피클마린트래킹",
+  "short_name": "피클마린",
+  "description": "실시간 해상 관제 · 5단계 브리핑 · 여수 중흥/낙포부두 연계 선박 모니터링 웹앱",
+  "lang": "ko",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "any",
+  "theme_color": "#0b0e14",
+  "background_color": "#0b0e14",
+  "categories": ["navigation", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "지도 관제",
+      "short_name": "지도",
+      "url": "./index.html?tab=map",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "AI 브리핑",
+      "short_name": "브리핑",
+      "url": "./index.html?tab=briefing",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
