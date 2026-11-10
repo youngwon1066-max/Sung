@@ -1,7 +1,7 @@
 /* 피클마린트래킹 서비스 워커
    - 앱 셸(index/manifest/icons)은 오프라인에서도 열리도록 캐시
    - 지도 타일·CDN(Leaflet)은 네트워크 우선, 실패 시 캐시 사용 */
-const VERSION = 'pickle-marine-v1';
+const VERSION = 'pickle-marine-v2';
 const SHELL = [
   './',
   './index.html',
