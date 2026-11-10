@@ -1209,7 +1209,7 @@
         cargo: "케미칼/석화제품 운반선 (3,576 DWT)",
         origin: { name: "광양/여수항", lat: 34.8620, lon: 127.7780, time: "11/7 출항" },
         dest: { name: "대산항 석화부두", lat: 37.0080, lon: 126.4150, eta: "대산 정박지 대기 중" },
-        pilotRule: "대산항 조석 및 도선사 승선 순번에 따라 선석 이동",
+        pilotRule: "대산항 조석 및 도선사 승선 순번",
         yeosuInbound: false,
         pastRoute: [
           [34.8620, 127.7780],
@@ -1464,7 +1464,7 @@
           {
             tag: "📦 3. 화물 및 흘수 상태",
             time: "공선 (선적 대기)",
-            text: `현재 흘수는 <span class='highlight-amber'>${vessel.draught}</span> 상태입니다. ${uName} 말씀대로 여수 하역이 아니라 현지에서 원료를 **선적(적하)**하기 위해 이동 중인 공선(Ballast) 상태예요 (3,799 DWT 케미칼/석유제품 운반선).`
+            text: `현재 흘수는 <span class='highlight-amber'>${vessel.draught}</span> 상태입니다. ${uName} 말씀대로 여수 하역이 아니라 현지에서 원료를 <b>선적(적하)</b>하기 위해 이동 중인 공선(Ballast) 상태예요 (3,799 DWT 케미칼/석유제품 운반선).`
           },
           {
             tag: "⏱️ 4. 중국 판진항 도착 예정일 (ETA)",
@@ -1558,7 +1558,7 @@
           {
             tag: "⚠️ 5. 대산항 접안 및 관제 조건",
             time: "항만 관제",
-            text: `<span class='highlight-amber'>${vessel.pilotRule}</span>에 따라 선석 이동 예정이며, 변동 발생 시 바로 업데이트해 드릴게요!`
+            text: `<span class='highlight-amber'>${vessel.pilotRule}</span>에 따른 선석 이동 일정을 주시 중이며, 변동 발생 시 바로 업데이트해 드릴게요!`
           }
         );
       } else if (vessel.id === 'pacific-sambu' || vessel.name.toUpperCase().includes('PACIFIC')) {
@@ -1625,7 +1625,7 @@
                           (vessel.cargo && (vessel.cargo.includes('실으러') || vessel.cargo.includes('선적')));
 
         let cargoText = isBallast ?
-          `현재 흘수는 <span class='highlight-amber'>${vessel.draught || '4.5m'}</span> 상태입니다. 목적지 <b>${destTitle}</b>에서 화물을 **선적(적하)**하기 위해 이동하는 공선/선적 대기 상태예요.` :
+          `현재 흘수는 <span class='highlight-amber'>${vessel.draught || '4.5m'}</span> 상태입니다. 목적지 <b>${destTitle}</b>에서 화물을 <b>선적(적하)</b>하기 위해 이동하는 공선/선적 대기 상태예요.` :
           `화물은 <b>${vessel.cargo || '석유화학 케미칼 제품'}</b>이며, 현재 흘수는 <span class='highlight-amber'>${vessel.draught || '5.5m'}</span> 상태입니다.`;
 
         let ruleText = vessel.pilotRule;
