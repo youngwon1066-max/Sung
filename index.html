@@ -1211,7 +1211,7 @@
   <!-- 오프라인·네트워크 실패 시에만 쓰는 data/fleet.json 내장 사본 (tools/sync_fallback.py 가 자동 동기화) -->
   <script type="application/json" id="fleetFallbackData">
 {
-  "updatedAt": "2026-11-27T14:13:44+09:00",
+  "updatedAt": "2026-11-27T14:16:26+09:00",
   "updatedBy": "워니 님의 AI 비서 (피클) · 6시간 주기 운항 추적 반영",
   "fleet": [
     {
@@ -1239,7 +1239,8 @@
         "name": "대만 타이중(Taichung) → 여수(12/6~8)",
         "lat": 24.2672,
         "lon": 120.5065,
-        "eta": "타이중 11/30 01:00 KST (여수 12/6~8 예정)"
+        "eta": "타이중 11/30 01:00 KST (여수 12/6~8 예정)",
+        "etaShort": "11/30 01:00 KST"
       },
       "pilotRule": "타이중(11/28~30) → 안핑/가오슝(12/1~2) 선적 → 여수(12/6~8) 입항 예정",
       "yeosuInbound": true,
@@ -1412,7 +1413,7 @@
         {
           "tag": "⏱️ 4. 대만 타이중 도착 예정일 (ETA)",
           "time": "{observedAt} 갱신",
-          "text": "타이중 도착 예정은 <span class='highlight-amber'>{eta}</span>입니다. 웨이팡 출항 후 보하이 해협 → 산둥반도 동단 → 황해 남하 항로를 순조롭게 내려오고 있어요."
+          "text": "타이중 도착 예정은 <span class='highlight-amber'>{etaShort}</span>입니다(여수 12/6~8 예정). 웨이팡 출항 후 보하이 해협 → 산둥반도 동단 → 황해 남하 항로를 순조롭게 내려오고 있어요."
         },
         {
           "tag": "⚠️ 5. 타이중·여수 접안 및 관제 조건",
@@ -2230,10 +2231,11 @@
         if (changed) {
           renderChips();
           updateView();
-          if (opts.manual) {
-            setUpdateStatus('✅ 최신 데이터 반영 · ' + (formatKstShort(payload.updatedAt) || ''), 'ok');
-            setTimeout(updateUpdatedAtLabel, 4000);
-          }
+        }
+        if (opts.manual) {
+          const stamp = formatKstShort(payload.updatedAt) || '';
+          setUpdateStatus((changed ? '✅ 최신 데이터 반영 · ' : '✅ 최신 상태입니다 · ') + stamp, 'ok');
+          setTimeout(updateUpdatedAtLabel, 4000);
         }
         return { ok: true, changed: changed };
       } catch (err) {
@@ -2425,6 +2427,7 @@
         draught: vessel.draught || '-',
         cargo: vessel.cargo || '-',
         eta: dest.eta || '확인 중',
+        etaShort: dest.etaShort || dest.eta || '확인 중',
         destName: dest.name || '목적지 항만',
         originName: (vessel.origin && vessel.origin.name) || '출발항',
         pilotRule: vessel.pilotRule || '-',
@@ -2656,9 +2659,12 @@
 
       const now = new Date();
       const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const obsLabel = currentVessel.observedAt ? formatKstShort(currentVessel.observedAt) : null;
 
-      // 1. 지도 오버레이 텍스트
-      document.getElementById('mapTagOverlay').textContent = `📐 ${currentVessel.name} 실시간 항적도 (${timeStr})`;
+      // 1. 지도 오버레이 텍스트 (관측 시각이 있으면 그 시각을 함께 표시)
+      document.getElementById('mapTagOverlay').textContent = obsLabel
+        ? `📐 ${currentVessel.name} 항적도 · 관측 ${obsLabel}`
+        : `📐 ${currentVessel.name} 실시간 항적도 (${timeStr})`;
 
       // 2. 외부 링크 업데이트
       document.getElementById('btnGmaps').href = `https://www.google.com/maps?q=${currentVessel.lat},${currentVessel.lon}&z=${currentVessel.zoom || 6}`;
@@ -2670,7 +2676,8 @@
       const statusHead = (currentVessel.status === 'completed')
         ? `${currentVessel.name} 추적 종료 · 마지막 확인 위치 표시`
         : `${currentVessel.name} 실시간 관제 중`;
-      document.getElementById('yurinaStatus').textContent = `${statusHead} (${timeStr} 갱신) ✨`;
+      const statusTail = obsLabel ? `관측 ${obsLabel}` : `${timeStr} 갱신`;
+      document.getElementById('yurinaStatus').textContent = `${statusHead} (${statusTail}) ✨`;
 
       // 4. 지도 위치 및 항적선 실시간 갱신!
       renderMapForVessel();
