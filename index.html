@@ -1211,7 +1211,7 @@
   <!-- 오프라인·네트워크 실패 시에만 쓰는 data/fleet.json 내장 사본 (tools/sync_fallback.py 가 자동 동기화) -->
   <script type="application/json" id="fleetFallbackData">
 {
-  "updatedAt": "2026-11-27T14:18:17+09:00",
+  "updatedAt": "2026-11-27T14:22:20+09:00",
   "updatedBy": "워니 님의 AI 비서 (피클) · 6시간 주기 운항 추적 반영",
   "fleet": [
     {
@@ -2726,7 +2726,8 @@
         let futurePoints = [];
         if (currentVessel.futureRoute && currentVessel.futureRoute.length > 1) {
           futurePoints = currentVessel.futureRoute;
-        } else if (currentVessel.dest && (Math.abs(vLat - dLat) > 0.01 || Math.abs(vLon - dLon) > 0.01)) {
+        } else if (currentVessel.status !== 'completed' && currentVessel.dest && (Math.abs(vLat - dLat) > 0.01 || Math.abs(vLon - dLon) > 0.01)) {
+          // 추적 종료(completed) 선박은 예정 항로를 그리지 않습니다(마지막 확인 위치만 표시)
           futurePoints = buildSeaWaypoints([vLat, vLon], [dLat, dLon]);
         }
 
